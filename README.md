@@ -11,13 +11,17 @@
 [![ver](https://img.shields.io/npm/v/penguins-eggs.svg)](https://npmjs.org/package/penguins-eggs)
 [![Get it as AppImage](https://img.shields.io/badge/Get%20it%20as-AppImage-important.svg)](https://github.com/pieroproietti/penguins-eggs/releases)
 
-<a href="https://drive.google.com/drive/folders/19fwjvsZiW0Dspu2Iq-fQN0J-PDbKBlYY">
-  <img src="https://raw.githubusercontent.com/pieroproietti/penguins-eggs/master/assets/penguins-eggs-logo.png" width="280" height="300" alt="CD-ROM">
+<a href="https://github.com/pieroproietti/coa">
+  <img src="https://raw.githubusercontent.com/pieroproietti/penguins-eggs/master/assets/penguins-eggs-logo.png" width="280" height="300" alt="penguins-eggs to coa">
 </a>
 
-It took years of work to create the penguins-eggs, and I also incurred expenses
-for renting the site and subscribing to Google Gemini, for the artificial
-intelligence that is now indispensable.
+### 🥚 The Evolution: Introducing [`oa-tools`](https://github.com/pieroproietti/oa-tools)
+
+After years of passionate work on *penguins-eggs*, I am currently undertaking a massive evolution of the project; [oa-tools]((https://github.com/pieroproietti/oa-tools)). I am developing **oa** (a high-performance, C-native remastering engine) and **coa** (its intelligent Go orchestrator). 
+
+This new architecture abandons fragile bash scripts in favor of native Linux kernel syscalls, OverlayFS, and strict Zero-Copy principles. It is the future of universal Linux remastering, but rewriting an entire ecosystem from scratch is an immense undertaking.
+
+**I need a hand.** Development requires countless hours of solitary coding, alongside expenses for server hosting and the AI tools (like Gemini) that have become indispensable to my workflow. If you believe in this project, please consider supporting my work financially or jumping in to help with the code!
 
 [![donate](https://img.shields.io/badge/Donate-00457C?style=for-the-badge&logo=paypal&logoColor=white)](https://paypal.me/penguinseggs)
 
