@@ -18,7 +18,7 @@ Presentation
     }
 
     // --- VARIABILI GLOBALI DEL TEMA ---
-    property string themeColor: "#990000"     // Rosso scuro
+    property string themeColor: "#aa3333"     // Rosso originale
     property string shadowColor: "#000000"    // Ombra nera
     property string textFont: "Helvetica"
     property int textSize: 22
