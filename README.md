@@ -1119,7 +1119,7 @@ Thank you!
 
 This project collects stars, look to the sky... contribute!
 
-[![Star History Chart](https://api.star-history.com/svg?repos=pieroproietti/penguins-eggs&type=Date)](https://star-history.com/#pieroproietti/penguins-eggs-legacy&Date)
+[![Star History Chart](https://star-history.dera.page/svg?repos=pieroproietti/penguins-eggs-legacy&type=date&legend=top-left)](https://star-history.dera.page/#pieroproietti/penguins-eggs-legacy&type=date&legend=top-left)
 
 # Copyright and licenses
 
