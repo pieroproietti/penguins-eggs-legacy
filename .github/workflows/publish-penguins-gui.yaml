@@ -287,7 +287,7 @@ jobs:
     container:
       image: archlinux
       volumes:
-        - /var/www/html/repos/rpm/fedora/42/x86_64:/mnt/fedora-repo # HostPath:ContainerPath
+        - /var/www/html/repos/rpm/fedora/42:/mnt/fedora-repo # HostPath:ContainerPath
     defaults:
       run:
         shell: bash
@@ -324,12 +324,18 @@ jobs:
             exit 1
           fi
 
-      - name: 3. Publish & Update Fedora Repo (NO Pruning)
+      - name: 3. Publish & Update Fedora Repo (WITH Pruning)
         working-directory: /mnt/fedora-repo
         run: |
+          mkdir -p /mnt/fedora-repo/x86_64
           mapfile -d '' packages < <(find /tmp/penguins-gui-fedora -type f -name 'penguins-gui-*.x86_64.rpm' ! -name '*.opensuse.*.rpm' -print0)
-          cp "${packages[@]}" /mnt/fedora-repo/
-          createrepo_c .
+          cp "${packages[@]}" /mnt/fedora-repo/x86_64/
+          cd /mnt/fedora-repo/x86_64
+          ls penguins-gui-[0-9]*.rpm 2>/dev/null | sort -V | head -n -1 | xargs -r rm -vf
+          rm -rf /mnt/fedora-repo/x86_64/repodata
+          createrepo_c /mnt/fedora-repo/x86_64
+          rm -rf /mnt/fedora-repo/repodata
+          createrepo_c /mnt/fedora-repo
 
   # ========================================================
   # 5.0 JOB DI PUBBLICAZIONE OPENSUSE
@@ -340,7 +346,7 @@ jobs:
     container:
       image: archlinux
       volumes:
-        - /var/www/html/repos/rpm/opensuse/leap/x86_64:/mnt/opensuse-repo # HostPath:ContainerPath
+        - /var/www/html/repos/rpm/opensuse/leap:/mnt/opensuse-repo # HostPath:ContainerPath
     defaults:
       run:
         shell: bash
@@ -377,9 +383,15 @@ jobs:
             exit 1
           fi
 
-      - name: 3. Publish & Update openSUSE Repo (NO Pruning)
+      - name: 3. Publish & Update openSUSE Repo (WITH Pruning)
         working-directory: /mnt/opensuse-repo
         run: |
+          mkdir -p /mnt/opensuse-repo/x86_64
           mapfile -d '' packages < <(find /tmp/penguins-gui-opensuse -type f -name 'penguins-gui-*.opensuse.x86_64.rpm' -print0)
-          cp "${packages[@]}" /mnt/opensuse-repo/
-          createrepo_c .
+          cp "${packages[@]}" /mnt/opensuse-repo/x86_64/
+          cd /mnt/opensuse-repo/x86_64
+          ls penguins-gui-[0-9]*.rpm 2>/dev/null | sort -V | head -n -1 | xargs -r rm -vf
+          rm -rf /mnt/opensuse-repo/x86_64/repodata
+          createrepo_c /mnt/opensuse-repo/x86_64
+          rm -rf /mnt/opensuse-repo/repodata
+          createrepo_c /mnt/opensuse-repo

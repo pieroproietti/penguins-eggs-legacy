@@ -214,7 +214,7 @@ jobs:
             cd "$arch_dir"
             
             # Pruning dei vecchi pacchetti in questa specifica architettura
-            PKG_BASES=$(find . -maxdepth 1 -name '*.apk' -exec basename {} \; | sed -E 's/(.*)-[0-9]+\..*/\1/' | sort -u)
+            PKG_BASES=$(find . -maxdepth 1 -name '*.apk' -exec basename {} \; | sed -E 's/-[0-9]+.*//' | sort -u)
             for base in $PKG_BASES; do
               ls ${base}-[0-9]*.apk 2>/dev/null | sort -V | head -n -1 | xargs -r rm -vf
             done
@@ -231,20 +231,30 @@ jobs:
           set -ex
           cd /mnt/repos/arch
           echo '--- ARCH: Cleaning old packages ---'
-          PKG_BASES=$(find . -maxdepth 1 -name '*.pkg.tar.zst' -exec basename {} \; | sed -E 's/(.*)-[0-9]+\..*/\1/' | sort -u)
+          PKG_BASES=$(find . -maxdepth 1 -name '*.pkg.tar.zst' -exec basename {} \; | sed -E 's/-[0-9]+.*//' | sort -u)
           for base in $PKG_BASES; do
             ls ${base}-[0-9]*.pkg.tar.zst 2>/dev/null | sort -V | head -n -1 | xargs -r rm -vf
-            ls ${base}-*.pkg.tar.zst.sig 2>/dev/null | sort -V | head -n -1 | xargs -r rm -vf
+            ls ${base}-[0-9]*.pkg.tar.zst.sig 2>/dev/null | sort -V | head -n -1 | xargs -r rm -vf
           done
           rm -f penguins-eggs.db.tar.gz penguins-eggs.files.tar.gz
           repo-add --sign --key "$GPG_KEY_ID" penguins-eggs.db.tar.gz *.pkg.tar.zst
 
-      - name: 6. Update RPM Repos
+      - name: 6. Update RPM Repos (WITH Pruning)
         run: |
-          set -e
-          echo "--- RPM: Re-indexing ---"
-          cd /mnt/repos/rpm/fedora/42/x86_64/; rm -rf repodata; createrepo_c .;
-          cd /mnt/repos/rpm/opensuse/leap/x86_64/; rm -rf repodata; createrepo_c .;
+          set -ex
+          echo "--- RPM: Cleaning & Re-indexing ---"
+          for repo_dir in /mnt/repos/rpm/fedora/42 /mnt/repos/rpm/opensuse/leap; do
+            [ -d "$repo_dir/x86_64" ] || continue
+            cd "$repo_dir/x86_64"
+            PKG_BASES=$(find . -maxdepth 1 -name '*.rpm' -exec basename {} \; | sed -E 's/-[0-9]+.*//' | sort -u)
+            for base in $PKG_BASES; do
+              ls ${base}-[0-9]*.rpm 2>/dev/null | sort -V | head -n -1 | xargs -r rm -vf
+            done
+            rm -rf "$repo_dir/x86_64/repodata"
+            createrepo_c "$repo_dir/x86_64"
+            rm -rf "$repo_dir/repodata"
+            createrepo_c "$repo_dir"
+          done
 
       - name: 7. Update Manjaro Repo (WITH Pruning)
         env:
@@ -253,10 +263,10 @@ jobs:
           set -ex
           cd /mnt/repos/manjaro
           echo '--- MANJARO: Cleaning old packages ---'
-          PKG_BASES=$(find . -maxdepth 1 -name '*.pkg.tar.zst' -exec basename {} \; | sed -E 's/(.*)-[0-9]+\..*/\1/' | sort -u)
+          PKG_BASES=$(find . -maxdepth 1 -name '*.pkg.tar.zst' -exec basename {} \; | sed -E 's/-[0-9]+.*//' | sort -u)
           for base in $PKG_BASES; do
             ls ${base}-[0-9]*.pkg.tar.zst 2>/dev/null | sort -V | head -n -1 | xargs -r rm -vf
-            ls ${base}-*.pkg.tar.zst.sig 2>/dev/null | sort -V | head -n -1 | xargs -r rm -vf
+            ls ${base}-[0-9]*.pkg.tar.zst.sig 2>/dev/null | sort -V | head -n -1 | xargs -r rm -vf
           done
           rm -f penguins-eggs.db.tar.gz penguins-eggs.files.tar.gz
           repo-add --sign --key "$GPG_KEY_ID" penguins-eggs.db.tar.gz *.pkg.tar.zst

@@ -45,11 +45,18 @@ jobs:
         run: |
           set -e
           echo "--- DEBIAN: Indexing ---"
+          mkdir -p dists/stable/main/binary-amd64
+          mkdir -p dists/stable/main/binary-arm64
+          mkdir -p dists/stable/main/binary-riscv64
+          mkdir -p dists/stable/main/binary-i386
+
           # Compila gli indici per tutte le architetture
           dpkg-scanpackages -a amd64 pool/main > dists/stable/main/binary-amd64/Packages
           gzip -9c dists/stable/main/binary-amd64/Packages > dists/stable/main/binary-amd64/Packages.gz
           dpkg-scanpackages -a arm64 pool/main > dists/stable/main/binary-arm64/Packages
           gzip -9c dists/stable/main/binary-arm64/Packages > dists/stable/main/binary-arm64/Packages.gz
+          dpkg-scanpackages -a riscv64 pool/main > dists/stable/main/binary-riscv64/Packages
+          gzip -9c dists/stable/main/binary-riscv64/Packages > dists/stable/main/binary-riscv64/Packages.gz
           dpkg-scanpackages -a i386 pool/main > dists/stable/main/binary-i386/Packages
           gzip -9c dists/stable/main/binary-i386/Packages > dists/stable/main/binary-i386/Packages.gz
           
@@ -58,7 +65,7 @@ jobs:
             -o APT::FTPArchive::Release::Label="Penguins-Eggs" \
             -o APT::FTPArchive::Release::Suite="stable" \
             -o APT::FTPArchive::Release::Codename="stable" \
-            -o APT::FTPArchive::Release::Architectures="amd64 arm64 i386" \
+            -o APT::FTPArchive::Release::Architectures="amd64 arm64 riscv64 i386" \
             -o APT::FTPArchive::Release::Components="main" \
             release dists/stable > dists/stable/Release
             
@@ -104,10 +111,10 @@ jobs:
         run: |
           set -ex
           echo '--- ARCH: Cleaning old packages ---'
-          PKG_BASES=$(find . -maxdepth 1 -name '*.pkg.tar.zst' -exec basename {} \; | sed -E 's/(.*)-[0-9]+\..*/\1/' | sort -u)
+          PKG_BASES=$(find . -maxdepth 1 -name '*.pkg.tar.zst' -exec basename {} \; | sed -E 's/-[0-9]+.*//' | sort -u)
           for base in $PKG_BASES; do
-            ls ${base}-*.pkg.tar.zst 2>/dev/null | sort -V | head -n -1 | xargs -r rm -vf
-            ls ${base}-*.pkg.tar.zst.sig 2>/dev/null | sort -V | head -n -1 | xargs -r rm -vf
+            ls ${base}-[0-9]*.pkg.tar.zst 2>/dev/null | sort -V | head -n -1 | xargs -r rm -vf
+            ls ${base}-[0-9]*.pkg.tar.zst.sig 2>/dev/null | sort -V | head -n -1 | xargs -r rm -vf
           done
           
           echo '--- ARCH: Indexing remaining packages ---'
@@ -123,10 +130,10 @@ jobs:
         run: |
           set -ex
           echo '--- MANJARO: Cleaning old packages ---'
-          PKG_BASES=$(find . -maxdepth 1 -name '*.pkg.tar.zst' -exec basename {} \; | sed -E 's/(.*)-[0-9]+\..*/\1/' | sort -u)
+          PKG_BASES=$(find . -maxdepth 1 -name '*.pkg.tar.zst' -exec basename {} \; | sed -E 's/-[0-9]+.*//' | sort -u)
           for base in $PKG_BASES; do
-            ls ${base}-*.pkg.tar.zst 2>/dev/null | sort -V | head -n -1 | xargs -r rm -vf
-            ls ${base}-*.pkg.tar.zst.sig 2>/dev/null | sort -V | head -n -1 | xargs -r rm -vf
+            ls ${base}-[0-9]*.pkg.tar.zst 2>/dev/null | sort -V | head -n -1 | xargs -r rm -vf
+            ls ${base}-[0-9]*.pkg.tar.zst.sig 2>/dev/null | sort -V | head -n -1 | xargs -r rm -vf
           done
           
           echo '--- MANJARO: Indexing remaining packages ---'
@@ -135,17 +142,33 @@ jobs:
             repo-add --sign --key "$GPG_KEY_ID" penguins-eggs.db.tar.gz *.pkg.tar.zst
           fi
 
-      - name: 5. Reindex RPM
+      - name: 5. Reindex RPM (WITH Pruning)
         run: |
-          set -e
-          echo "--- RPM: Re-indexing ---"
-          cd /mnt/repos/rpm/fedora/42/x86_64/ && rm -rf repodata && createrepo_c .
-          cd /mnt/repos/rpm/opensuse/leap/x86_64/ && rm -rf repodata && createrepo_c .
-          
-          # Controllo di sicurezza se esiste la cartella el9 (presente nel vecchio script)
-          if [ -d "/mnt/repos/rpm/el9/x86_64" ]; then
-            cd /mnt/repos/rpm/el9/x86_64 && rm -rf repodata && createrepo_c .
-          fi
+          set -ex
+          echo "--- RPM: Cleaning & Re-indexing ---"
+          for repo_dir in /mnt/repos/rpm/fedora/42 /mnt/repos/rpm/opensuse/leap /mnt/repos/rpm/el9; do
+            [ -d "$repo_dir/x86_64" ] || continue
+            echo "--- RPM: Elaborazione $repo_dir ---"
+            cd "$repo_dir/x86_64"
+
+            # Appiattisce eventuali sottocartelle x86_64/x86_64/ create da vecchi artifact
+            if [ -d "x86_64" ]; then
+              find x86_64 -type f -name '*.rpm' -exec mv -f -t . {} +
+              rm -rf x86_64
+            fi
+
+            # Pruning dei vecchi pacchetti .rpm (mantiene solo l'ultima versione per ogni pacchetto)
+            PKG_BASES=$(find . -maxdepth 1 -name '*.rpm' -exec basename {} \; | sed -E 's/-[0-9]+.*//' | sort -u)
+            for base in $PKG_BASES; do
+              ls ${base}-[0-9]*.rpm 2>/dev/null | sort -V | head -n -1 | xargs -r rm -vf
+            done
+
+            # Rigenera repodata sia in x86_64/ (retrocompatibilità) sia nella radice della repo (baseurl ufficiale)
+            rm -rf "$repo_dir/x86_64/repodata"
+            createrepo_c "$repo_dir/x86_64"
+            rm -rf "$repo_dir/repodata"
+            createrepo_c "$repo_dir"
+          done
 
       - name: 6. Reindex Alpine (WITH Pruning)
         env:
@@ -164,7 +187,7 @@ jobs:
             cd "/mnt/repos/alpine/$ARCH"
             
             echo '--- ALPINE: Cleaning old packages ---'
-            PKG_BASES=$(find . -maxdepth 1 -name '*.apk' -exec basename {} \; | sed -E 's/(.*)-[0-9]+\..*/\1/' | sort -u)
+            PKG_BASES=$(find . -maxdepth 1 -name '*.apk' -exec basename {} \; | sed -E 's/-[0-9]+.*//' | sort -u)
             for base in $PKG_BASES; do
               ls ${base}-[0-9]*.apk 2>/dev/null | sort -V | head -n -1 | xargs -r rm -vf
             done

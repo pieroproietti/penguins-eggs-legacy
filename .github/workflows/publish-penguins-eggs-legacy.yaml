@@ -309,15 +309,13 @@ jobs:
           rpmbuild -ba packaging/rpm/penguins-eggs-legacy.spec
           rpmsign --addsign $(find $HOME/rpmbuild/RPMS -name '*.rpm')
           
-          # Passiamo l'intera cartella invece dei singoli file!
-          echo "rpm_dir=$HOME/rpmbuild/RPMS" >> $GITHUB_OUTPUT
+          echo "rpm_path=$(find $HOME/rpmbuild/RPMS -name '*.rpm')" >> $GITHUB_OUTPUT
 
       - name: 8. Upload RPM Artifact for publishing
         uses: actions/upload-artifact@v4
         with:
           name: fedora-42-rpm-for-repo
-          # Usa la variabile della cartella
-          path: ${{ steps.build.outputs.rpm_dir }}    # END build-fc42
+          path: ${{ steps.build.outputs.rpm_path }}    # END build-fc42
 
   # ========================================================
   # build-manjaro
@@ -514,6 +512,7 @@ jobs:
           mkdir -p /mnt/deb-repo/pool/main
           mkdir -p /mnt/deb-repo/dists/stable/main/binary-amd64
           mkdir -p /mnt/deb-repo/dists/stable/main/binary-arm64
+          mkdir -p /mnt/deb-repo/dists/stable/main/binary-riscv64
           mkdir -p /mnt/deb-repo/dists/stable/main/binary-i386
 
       - name: 4. Download Debian artifacts
@@ -537,6 +536,9 @@ jobs:
           
           dpkg-scanpackages -a arm64 pool/main > dists/stable/main/binary-arm64/Packages
           gzip -9c dists/stable/main/binary-arm64/Packages > dists/stable/main/binary-arm64/Packages.gz
+
+          dpkg-scanpackages -a riscv64 pool/main > dists/stable/main/binary-riscv64/Packages
+          gzip -9c dists/stable/main/binary-riscv64/Packages > dists/stable/main/binary-riscv64/Packages.gz
           
           dpkg-scanpackages -a i386 pool/main > dists/stable/main/binary-i386/Packages
           gzip -9c dists/stable/main/binary-i386/Packages > dists/stable/main/binary-i386/Packages.gz
@@ -547,7 +549,7 @@ jobs:
             -o APT::FTPArchive::Release::Label="Penguins-Eggs" \
             -o APT::FTPArchive::Release::Suite="stable" \
             -o APT::FTPArchive::Release::Codename="stable" \
-            -o APT::FTPArchive::Release::Architectures="amd64 arm64 i386" \
+            -o APT::FTPArchive::Release::Architectures="amd64 arm64 riscv64 i386" \
             -o APT::FTPArchive::Release::Components="main" \
             release dists/stable > dists/stable/Release
             
@@ -679,25 +681,25 @@ jobs:
           ls -l
           
           echo '--- ARCH: Cleaning old packages ---'
-          PKG_BASES=$(find . -maxdepth 1 -name '*.pkg.tar.zst' -exec basename {} \; | sed -E 's/(.*)-[0-9]+\..*/\1/' | sort -u)
+          PKG_BASES=$(find . -maxdepth 1 -name '*.pkg.tar.zst' -exec basename {} \; | sed -E 's/-[0-9]+.*//' | sort -u)
           echo "--- ARCH: Found package bases: $PKG_BASES"
           for base in $PKG_BASES; do
             echo "--- Processing: $base ---"
-            ls ${base}-*.pkg.tar.zst 2>/dev/null | sort -V | head -n -1 | xargs -r rm -vf
-            ls ${base}-*.pkg.tar.zst.sig 2>/dev/null | sort -V | head -n -1 | xargs -r rm -vf
+            ls ${base}-[0-9]*.pkg.tar.zst 2>/dev/null | sort -V | head -n -1 | xargs -r rm -vf
+            ls ${base}-[0-9]*.pkg.tar.zst.sig 2>/dev/null | sort -V | head -n -1 | xargs -r rm -vf
           done
           echo '--- ARCH: Cleaning complete ---'
           echo "--- ARCH: Files AFTER cleaning ---"
           ls -l
           
-          rm -f penguins-eggs-legacy.db.tar.gz penguins-eggs-legacyfiles.tar.gz
-          repo-add --sign --key "$GPG_KEY_ID" penguins-eggs-legacy.db.tar.gz *.pkg.tar.zst
+          rm -f penguins-eggs.db.tar.gz penguins-eggs.files.tar.gz
+          repo-add --sign --key "$GPG_KEY_ID" penguins-eggs.db.tar.gz *.pkg.tar.zst
           cd / # Ritorna alla root 
 
-      - name: 8. Update RPM Repos
+      - name: 8. Update RPM Repos (WITH Pruning)
         run: |
-          set -e
-          echo "--- RPM: Re-indexing ---"
+          set -ex
+          echo "--- RPM: Cleaning & Re-indexing ---"
           
           # Controllo di sicurezza: se l'attrezzo manca, lo forgiamo sul momento
           if ! command -v createrepo_c &> /dev/null && ! command -v createrepo &> /dev/null; then
@@ -717,15 +719,27 @@ jobs:
             CMD="createrepo"
           fi
 
-          # Generazione dei metadati
-          echo "Processando Fedora 42..."
-          cd /mnt/repos/rpm/fedora/42/x86_64/ && rm -rf repodata && $CMD .
-          
-          echo "Processando openSUSE Leap..."
-          cd /mnt/repos/rpm/opensuse/leap/x86_64/ && rm -rf repodata && $CMD .
-          
-          echo "Processando EL9..."
-          cd /mnt/repos/rpm/el9/x86_64/ && rm -rf repodata && $CMD .
+          # Pulizia e generazione dei metadati
+          for repo_dir in /mnt/repos/rpm/fedora/42 /mnt/repos/rpm/opensuse/leap /mnt/repos/rpm/el9; do
+            [ -d "$repo_dir/x86_64" ] || continue
+            echo "Processando $repo_dir..."
+            cd "$repo_dir/x86_64"
+
+            if [ -d "x86_64" ]; then
+              find x86_64 -type f -name '*.rpm' -exec mv -f -t . {} +
+              rm -rf x86_64
+            fi
+
+            PKG_BASES=$(find . -maxdepth 1 -name '*.rpm' -exec basename {} \; | sed -E 's/-[0-9]+.*//' | sort -u)
+            for base in $PKG_BASES; do
+              ls ${base}-[0-9]*.rpm 2>/dev/null | sort -V | head -n -1 | xargs -r rm -vf
+            done
+
+            rm -rf "$repo_dir/x86_64/repodata"
+            $CMD "$repo_dir/x86_64"
+            rm -rf "$repo_dir/repodata"
+            $CMD "$repo_dir"
+          done
           
           echo "✅ Re-indexing RPM completato con successo!"
 
@@ -744,16 +758,16 @@ jobs:
           ls -l
           
           echo '--- MANJARO: Cleaning old packages ---'
-          PKG_BASES=$(find . -maxdepth 1 -name '*.pkg.tar.zst' -exec basename {} \; | sed -E 's/(.*)-[0-9]+\..*/\1/' | sort -u)
+          PKG_BASES=$(find . -maxdepth 1 -name '*.pkg.tar.zst' -exec basename {} \; | sed -E 's/-[0-9]+.*//' | sort -u)
 
           echo "--- MANJARO: Found package bases: $PKG_BASES"
           for base in $PKG_BASES; do
             echo "--- Processing: $base ---"
-            ls ${base}-*.pkg.tar.zst 2>/dev/null | sort -V | head -n -1 | xargs -r rm -vf
-            ls ${base}-*.pkg.tar.zst.sig 2>/dev/null | sort -V | head -n -1 | xargs -r rm -vf
+            ls ${base}-[0-9]*.pkg.tar.zst 2>/dev/null | sort -V | head -n -1 | xargs -r rm -vf
+            ls ${base}-[0-9]*.pkg.tar.zst.sig 2>/dev/null | sort -V | head -n -1 | xargs -r rm -vf
           done
           echo '--- MANJARO: Cleaning complete ---'
           
-          rm -f penguins-eggs-legacydb.tar.gz penguins-eggs-legacy.files.tar.gz
-          repo-add --sign --key "$GPG_KEY_ID" penguins-eggs-legacy.db.tar.gz *.pkg.tar.zst
+          rm -f penguins-eggs.db.tar.gz penguins-eggs.files.tar.gz
+          repo-add --sign --key "$GPG_KEY_ID" penguins-eggs.db.tar.gz *.pkg.tar.zst
           cd / # Ritorna alla root
